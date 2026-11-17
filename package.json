@@ -1,0 +1,16 @@
+{
+  "name": "stage_att_auto",
+  "version": "1.0.0",
+  "description": "네이버 WORKS 스테이지 출퇴근 위젯 자동화 (출근·퇴근·초기화)",
+  "type": "commonjs",
+  "scripts": {
+    "att": "playwright test --project=attendance",
+    "att:headed": "playwright test --project=attendance --headed",
+    "reset": "playwright test --project=reset",
+    "reset:headed": "playwright test --project=reset --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0",
+    "dotenv": "^17.4.2"
+  }
+}
