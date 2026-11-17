@@ -23,7 +23,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const COMMANDS_FILE = path.join(__dirname, 'commands.json');
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 const SCHEDULE_FILE = path.join(__dirname, 'schedule.json');
-const PORT = Number(process.env.PORT) || 4173;
+const PORT = Number(process.env.PORT) || 4174;
 const HOST = '127.0.0.1';
 const MAX_HISTORY = 50;
 const MAX_LOG_LINES = 4000;
@@ -568,9 +568,31 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(req, res);
 });
 
-server.listen(PORT, HOST, () => {
-    console.log(`단축 지시 실행 UI: http://${HOST}:${PORT}  (프로젝트: ${ROOT})`);
-    console.log('종료하려면 Ctrl+C');
+// 포트가 이미 쓰이고 있으면(다른 패널이 켜져 있는 경우 등) 안내하고 다음 포트로 옮겨 띄운다.
+let listenPort = PORT;
+let listenAttempts = 0;
+
+server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE' && listenAttempts < 10) {
+        console.log(`포트 ${listenPort} 은(는) 이미 사용 중입니다 (다른 패널이 켜져 있을 수 있습니다: http://${HOST}:${listenPort}). 다음 포트로 옮깁니다.`);
+        listenPort += 1;
+        listenAttempts += 1;
+        setTimeout(() => server.listen(listenPort, HOST), 200);
+        return;
+    }
+
+    console.error(`서버를 켤 수 없습니다: ${error.message}`);
+    process.exit(1);
+});
+
+server.listen(listenPort, HOST, () => {
+    console.log(`단축 지시 실행 UI: http://${HOST}:${listenPort}  (프로젝트: ${ROOT})`);
+
+    if (listenPort !== PORT) {
+        console.log(`※ 기본 포트 ${PORT} 대신 ${listenPort} 에서 켜졌습니다. 브라우저에서 위 주소를 열어 주세요.`);
+    }
+
+    console.log('종료하려면 Ctrl+C 또는 패널의 "패널 끄기"');
 });
 
 process.on('SIGINT', () => {
