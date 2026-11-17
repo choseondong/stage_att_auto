@@ -42,7 +42,7 @@ async function readIsOn(widget, fallbackText = '') {
     return /\bON\b/.test(fallbackText);
 }
 
-// 결과 스크린샷 폴더: 프로젝트 루트/stage_att_results (실행 시작 시 비운다)
+// 결과 스크린샷 폴더 (실행 시작 시 비운다). 경로는 프로젝트 루트 기준.
 const RESULT_DIR_NAME = 'results';
 
 const STAGE_HOME_URL = 'https://stage-home.worksmobile.com/';
@@ -117,7 +117,7 @@ async function waitForToastSettled(page, timeoutMs = 600) {
     }
 }
 
-// stage 계정(work7, work2~work6)에 real과 같은 라벨을 순서대로 붙인다.
+// stage 계정(work1~work6)에 real과 같은 근무 방식 라벨을 순서대로 붙인다. 실제 아이디는 .env 에서 읽는다.
 // 스테이지 출퇴근 위젯 계정은 .env 의 stage_worktest1~6_ID/PW 에서 읽는다 (2026-11-17 사용자 지시: 스테이지 계정은 따로 관리).
 // 순서: 1 고정 / 2 선택 / 3 시차 / 4 교대 / 5 탄력 / 6 개인별일정근무
 const ATTENDANCE_LABELS = ['낮고정근무', '낮선택근무', '낮시차근무', '낮교대근무', '낮탄력근무', '낮개인별일정근무'];
@@ -156,6 +156,13 @@ function filterAccountsByEnv(accounts) {
 const attendanceAccounts = filterAccountsByEnv(allAttendanceAccounts);
 
 // 실행 모드: STAGE_ATT_MODE = in(출근만) | out(퇴근만) | both(출근 후 퇴근, 기본). 패널의 출근/퇴근/출퇴근 버튼이 넘긴다.
+// 계정별로 왜 건너뛰었는지 모아 두었다가, 처리 0건으로 실패할 때 메시지에 함께 적는다.
+const skipReasons = new Map();
+
+function recordSkip(account, reason) {
+    skipReasons.set(account.label, reason);
+}
+
 const RUN_MODE = ['in', 'out', 'both'].includes((process.env.STAGE_ATT_MODE || '').toLowerCase())
     ? process.env.STAGE_ATT_MODE.toLowerCase()
     : 'both';
@@ -658,12 +665,14 @@ async function clockInForAccount(page, account) {
 
     if (state.hasNoWorkSchedule) {
         console.log(`${account.label} 건너뜀: ${NO_WORK_SCHEDULE_MESSAGE}`);
+        recordSkip(account, NO_WORK_SCHEDULE_MESSAGE);
         return;
     }
 
     // 오늘 근로 시간이 이미 끝난 계정은 출근할 수 없으므로(위젯에 "근무 결과 신청"만 노출) 건너뛴다.
     if (state.text.includes('근로 시간이 종료되었습니다')) {
         console.log(`${account.label} 건너뜀 (퇴근 단계도 제외): 근로 시간이 종료되어 출근할 수 없습니다.`);
+        recordSkip(account, '근로 시간이 종료되어 출근할 수 없음 (근무 시간대에 다시 실행)');
         return;
     }
 
@@ -673,6 +682,7 @@ async function clockInForAccount(page, account) {
 
         if (!reset) {
             console.log(`${account.label} 초기화 실패로 출근을 건너뜁니다 (퇴근 단계도 제외).`);
+            recordSkip(account, '이미 출근 상태인데 상세 팝업에서 초기화하지 못함 (초기화 버튼 없음)');
             return;
         }
 
@@ -696,6 +706,7 @@ async function clockInForAccount(page, account) {
     const clockInResult = await clickAttendanceButton(page, state, '출근', account.label);
     if (clockInResult.skipped) {
         console.log(`${account.label} 출근 건너뜀 (퇴근 단계도 제외): ${clockInResult.reason}`);
+        recordSkip(account, clockInResult.reason);
         return;
     }
 
@@ -832,6 +843,7 @@ test.describe('스테이지 출퇴근 위젯 자동화', () => {
 
                         if (!state.isOn && canClockIn) {
                             console.log(`${account.label} 퇴근 건너뜀: 출근 상태가 아닙니다.`);
+                            recordSkip(account, '출근 상태가 아니라 퇴근할 것이 없음');
                             return;
                         }
                     }
@@ -887,7 +899,8 @@ test.describe('스테이지 출퇴근 위젯 자동화', () => {
         const processedCount = RUN_MODE === 'out' ? clockedOutAccounts.length : clockedInAccounts.length;
 
         if (processedCount === 0 && failures.length === 0) {
-            failures.push(`모든 계정이 건너뛰어져 ${RUN_MODE === 'out' ? '퇴근' : '출근'}을 한 건도 하지 못했습니다. 위젯 버튼/상태 표시나 계정 상태를 확인하세요.`);
+            const reasons = [...skipReasons.entries()].map(([label, reason]) => `${label}: ${reason}`).join(' / ');
+            failures.push(`모든 계정이 건너뛰어져 ${RUN_MODE === 'out' ? '퇴근' : '출근'}을 한 건도 하지 못했습니다.${reasons ? ` 사유 — ${reasons}` : ' 위젯 버튼/상태 표시나 계정 상태를 확인하세요.'}`);
         }
 
         expect(failures, failures.join('\n')).toEqual([]);
