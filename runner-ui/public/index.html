@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>자동화 실행 패널</title>
+<style>
+  :root {
+    --bg: #f4f6fa; --panel: #ffffff; --line: #e1e5ec; --text: #1f2430; --muted: #6b7280;
+    --primary: #2563eb; --primary-dark: #1d4ed8; --ok: #16a34a; --fail: #dc2626; --warn: #d97706; --stop: #b91c1c;
+    --console-bg: #0f172a; --console-text: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 24px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .spacer { flex: 1; }
+  .status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; }
+  .dot.running { background: var(--primary); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  label.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; user-select: none; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); padding: 8px 12px; color: var(--text); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.stop { background: var(--stop); color: #fff; border-color: var(--stop); }
+  button.ghost { background: transparent; }
+  main { display: grid; grid-template-columns: minmax(360px, 480px) 1fr; gap: 20px; padding: 20px 24px; min-height: calc(100vh - 60px); }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+  .groups { display: flex; flex-direction: column; gap: 14px; }
+  .group { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .group h2 { margin: 0 0 2px; font-size: 15px; }
+  .group p.desc { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+  .cmd { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px dashed var(--line); }
+  .cmd:first-of-type { border-top: 0; }
+  .cmd button.run { flex: 1; text-align: left; display: flex; align-items: center; gap: 8px; background: #f8fafc; }
+  .cmd button.run:hover:not(:disabled) { border-color: var(--primary); background: #eff6ff; }
+  .cmd button.run .label { flex: 1; }
+  .cmd button.run .meta { font-size: 11.5px; color: var(--muted); }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .badge.passed { color: var(--ok); border-color: #bbf7d0; background: #f0fdf4; }
+  .badge.failed { color: var(--fail); border-color: #fecaca; background: #fef2f2; }
+  .badge.stopped { color: var(--warn); border-color: #fde68a; background: #fffbeb; }
+  .badge.headed { color: var(--primary); border-color: #bfdbfe; background: #eff6ff; }
+  .cmd button.folder { padding: 6px 8px; font-size: 12px; }
+  .right { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .console-wrap { background: var(--console-bg); color: var(--console-text); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; min-height: 420px; height: 62vh; }
+  .console-head { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #94a3b8; margin-bottom: 8px; }
+  .console-head .spacer { flex: 1; }
+  .console-head button { background: #1e293b; color: #e2e8f0; border-color: #334155; padding: 4px 10px; font-size: 12px; }
+  pre#log { flex: 1; margin: 0; overflow: auto; font: 12.5px/1.5 "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+  pre#log .ok { color: #86efac; } pre#log .fail { color: #fca5a5; } pre#log .warn { color: #fcd34d; } pre#log .cmdline { color: #93c5fd; } pre#log .head { color: #c4b5fd; font-weight: 600; }
+  .history { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .history h2 { font-size: 14px; margin: 0 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  td.result-passed { color: var(--ok); } td.result-failed { color: var(--fail); } td.result-stopped { color: var(--warn); }
+  .schedule { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .schedule h2 { font-size: 14px; margin: 0 0 8px; }
+  .schedule-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; }
+  .schedule-form select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); max-width: 320px; }
+  .schedule-form input[type=number] { font: inherit; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--line); }
+  .schedule-form button { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .schedule .hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+  .sched-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .sched-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 8px; background: #f8fafc; }
+  .sched-list li .when { color: var(--primary); font-weight: 600; min-width: 110px; }
+  .sched-list li .spacer { flex: 1; }
+  .sched-list li button { padding: 4px 10px; font-size: 12px; }
+  .att-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  .att-table th, .att-table td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  .att-table th { color: var(--muted); font-weight: 600; }
+  .att-table td.id { color: var(--muted); font-size: 12px; }
+  .att-table button { padding: 5px 10px; font-size: 12.5px; margin-right: 4px; }
+  .att-table button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .att-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0 4px; font-size: 13px; }
+  .att-toolbar .spacer { flex: 1; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: .95; }
+</style>
+</head>
+<body>
+<header>
+  <h1>자동화 실행 패널</h1>
+  <span class="status"><span id="dot" class="dot"></span><span id="statusText">대기 중</span></span>
+  <span class="spacer"></span>
+  <label class="toggle"><input type="checkbox" id="headed"> 브라우저 보기 (headed)</label>
+  <button id="stopBtn" class="stop" disabled>중지</button>
+  <button id="reportBtn" class="ghost" title="마지막 실행의 Playwright HTML 리포트">리포트 열기</button>
+  <button id="cleanupBtn" class="ghost" title="오류 스크린샷 폴더와 실행 이력을 비웁니다.">결과 초기화</button>
+  <button id="shutdownBtn" class="ghost" title="서버를 끕니다. 실행 중인 테스트가 있으면 먼저 중지하고, 오류 스크린샷과 실행 이력을 비웁니다.">패널 끄기</button>
+</header>
+
+<main>
+  <section class="groups" id="groups"></section>
+
+  <section class="right">
+    <div class="schedule">
+      <h2>예약 실행</h2>
+      <div class="schedule-form">
+        <select id="schedCommand"></select>
+        <label><input type="number" id="schedDelay" min="0" max="1440" value="5" style="width:64px"> 분 후</label>
+        <label><input type="number" id="schedRepeat" min="1" max="50" value="1" style="width:56px"> 회</label>
+        <label>간격 <input type="number" id="schedInterval" min="1" max="1440" value="20" style="width:64px"> 분</label>
+        <button id="schedBtn">예약</button>
+      </div>
+      <p class="hint">반복은 "이전 실행이 끝난 뒤 간격만큼 쉬고" 다음 회차를 시작합니다. 실행 중인 작업이 있으면 끝난 뒤 이어서 돕니다. headed 여부는 상단 토글을 따릅니다.</p>
+      <ul id="schedList" class="sched-list"></ul>
+    </div>
+
+    <div class="console-wrap">
+      <div class="console-head">
+        <span id="currentLabel">실행 로그</span>
+        <span id="elapsed"></span>
+        <span class="spacer"></span>
+        <label class="toggle" style="color:#cbd5e1"><input type="checkbox" id="autoscroll" checked> 자동 스크롤</label>
+        <button id="clearBtn">지우기</button>
+      </div>
+      <pre id="log"></pre>
+    </div>
+
+    <div class="history">
+      <h2>최근 실행 이력</h2>
+      <table>
+        <thead><tr><th>시작</th><th>명령</th><th>모드</th><th>결과</th><th>통과/실패/건너뜀</th><th>소요</th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const $ = (selector) => document.querySelector(selector);
+  const groupsEl = $('#groups');
+  const logEl = $('#log');
+  const headedToggle = $('#headed');
+  let commands = {};
+  let running = false;
+  let startedAt = null;
+  let elapsedTimer = null;
+
+  function toast(message) {
+    const el = $('#toast');
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.remove('show'), 3200);
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function formatDuration(seconds) {
+    if (seconds == null) return '';
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return minutes ? `${minutes}분 ${rest}초` : `${rest}초`;
+  }
+
+  function resultLabel(entry) {
+    if (!entry) return '';
+    if (entry.result === 'stopped') return '중지';
+    if (entry.result === 'passed') return '통과';
+    return '실패';
+  }
+
+  // 주소의 ?env=stage|real 로 보여 줄 환경을 고른다. 없으면 전부 보여 준다.
+  const envFilter = (new URLSearchParams(location.search).get('env') || '').toLowerCase();
+  const ENV_TITLES = { stage: 'stage 자동화 실행 패널', real: 'real 자동화 실행 패널' };
+
+  if (ENV_TITLES[envFilter]) {
+    document.title = ENV_TITLES[envFilter];
+    document.querySelector('header h1').textContent = ENV_TITLES[envFilter];
+  }
+
+  // ?view=attendance 이면 출퇴근 그룹만 보여 주는 "출퇴근 패널"이 된다.
+  const viewFilter = (new URLSearchParams(location.search).get('view') || '').toLowerCase();
+
+  if (viewFilter === 'attendance') {
+    document.title = `${ENV_TITLES[envFilter] || '자동화 실행 패널'} · 출퇴근`;
+    document.querySelector('header h1').textContent = `${envFilter ? envFilter + ' ' : ''}출퇴근 패널`;
+  }
+
+  // 계정별 출퇴근/초기화 표
+  function renderAttendanceGroup(group, data) {
+    const section = document.createElement('div');
+    section.className = 'group';
+    const lastRun = data.lastById[group.runCommand];
+    const lastReset = data.lastById[group.resetCommand];
+    section.innerHTML = `<h2>${group.title}</h2><p class="desc">${group.description || ''}</p>
+      <div class="att-toolbar">
+        <label class="toggle"><input type="checkbox" id="attResetAfter" checked> 퇴근 후 초기화 (퇴근·출퇴근에 적용)</label>
+        <span class="spacer"></span>
+        <button data-att-action="in" data-att-target="all">전체 출근</button>
+        <button data-att-action="out" data-att-target="all">전체 퇴근</button>
+        <button class="primary" data-att-action="both" data-att-target="all">전체 출퇴근</button>
+        <button data-att-action="reset" data-att-target="all">전체 초기화</button>
+        ${group.commands.find((c) => c.resultsDir) ? `<button class="folder" data-folder="${group.runCommand}" title="출퇴근 캡처 폴더 열기">폴더</button>` : ''}
+      </div>
+      <table class="att-table">
+        <thead><tr><th>#</th><th>근무 방식</th><th>계정</th><th>실행</th></tr></thead>
+        <tbody>${group.accounts.map((account) => `
+          <tr>
+            <td>${account.index}</td>
+            <td>${account.label}</td>
+            <td class="id">${account.id ? account.id.split('@')[0] : '<span style="color:var(--fail)">.env 없음</span>'}</td>
+            <td>
+              <button data-att-action="in" data-att-target="${account.index}" ${account.id ? '' : 'disabled'}>출근</button>
+              <button data-att-action="out" data-att-target="${account.index}" ${account.id ? '' : 'disabled'}>퇴근</button>
+              <button class="primary" data-att-action="both" data-att-target="${account.index}" ${account.id ? '' : 'disabled'}>출퇴근</button>
+              <button data-att-action="reset" data-att-target="${account.index}" ${account.id ? '' : 'disabled'}>초기화</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <p class="desc" style="margin-top:8px">마지막 출퇴근: ${lastRun ? `${resultLabel(lastRun)} ${formatTime(lastRun.startedAt)} (${lastRun.label})` : '없음'} · 마지막 초기화: ${lastReset ? `${resultLabel(lastReset)} ${formatTime(lastReset.startedAt)} (${lastReset.label})` : '없음'}</p>`;
+
+    for (const command of group.commands) {
+      commands[command.id] = command;
+    }
+
+    section.dataset.attendance = JSON.stringify({ run: group.runCommand, reset: group.resetCommand, labels: Object.fromEntries(group.accounts.map((a) => [String(a.index), a.label])) });
+    return section;
+  }
+
+  function renderGroups(data) {
+    groupsEl.innerHTML = '';
+    commands = {};
+
+    for (const group of data.groups) {
+      if (envFilter && group.env && group.env !== 'all' && group.env !== envFilter) {
+        continue;
+      }
+
+      if (viewFilter === 'attendance' && group.type !== 'attendance') {
+        continue;
+      }
+
+      if (group.type === 'attendance') {
+        groupsEl.appendChild(renderAttendanceGroup(group, data));
+        continue;
+      }
+
+      const section = document.createElement('div');
+      section.className = 'group';
+      section.innerHTML = `<h2>${group.title}</h2><p class="desc">${group.description || ''}</p>`;
+
+      for (const command of group.commands) {
+        commands[command.id] = command;
+        const last = data.lastById[command.id];
+        const row = document.createElement('div');
+        row.className = 'cmd';
+        row.innerHTML = `
+          <button class="run" data-id="${command.id}" title="${command.shortcut ? '단축어: ' + command.shortcut : ''}">
+            <span class="label">${command.label}</span>
+            ${command.estimate ? `<span class="meta">${command.estimate}</span>` : ''}
+            <span class="badge ${last ? last.result : ''}" data-last="${command.id}">${last ? `${resultLabel(last)} ${formatTime(last.startedAt)}` : '미실행'}</span>
+          </button>
+          ${command.resultsDir ? `<button class="folder" data-folder="${command.id}" title="${command.resultsDir} 폴더 열기">폴더</button>` : ''}
+        `;
+        section.appendChild(row);
+      }
+
+      groupsEl.appendChild(section);
+    }
+
+    // 예약 실행 드롭다운 (화면에 보이는 그룹만)
+    const select = $('#schedCommand');
+    select.innerHTML = '';
+
+    for (const group of data.groups) {
+      if (envFilter && group.env && group.env !== 'all' && group.env !== envFilter) continue;
+      if (group.id === 'tools') continue;
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = group.title;
+
+      for (const command of group.commands) {
+        const option = document.createElement('option');
+        option.value = command.id;
+        option.textContent = command.label;
+        optgroup.appendChild(option);
+      }
+
+      select.appendChild(optgroup);
+    }
+
+    updateButtons();
+  }
+
+  let schedules = [];
+
+  function renderSchedules() {
+    const list = $('#schedList');
+    list.innerHTML = '';
+
+    for (const item of schedules) {
+      const remainMs = new Date(item.runAt) - Date.now();
+      const when = remainMs <= 0
+        ? (running ? '실행 대기 (현재 작업 종료 후)' : '곧 시작')
+        : `${formatDuration(Math.ceil(remainMs / 1000))} 후`;
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="when">${when}</span><span>${item.groupTitle ? item.groupTitle + ' › ' : ''}${item.label}</span>
+        <span class="badge">${item.total > 1 ? `${item.total - item.remaining + 1}/${item.total}회차, 간격 ${item.intervalMinutes}분` : '1회'}</span>
+        <span class="badge">${item.headed ? 'headed' : 'headless'}</span><span class="spacer"></span>
+        <button data-cancel="${item.sid}">취소</button>`;
+      list.appendChild(li);
+    }
+  }
+
+  setInterval(renderSchedules, 1000);
+
+  $('#schedBtn').addEventListener('click', async () => {
+    const id = $('#schedCommand').value;
+    if (!id) { toast('예약할 명령을 고르세요.'); return; }
+    const body = {
+      id,
+      delayMinutes: Number($('#schedDelay').value),
+      repeatCount: Number($('#schedRepeat').value),
+      intervalMinutes: Number($('#schedInterval').value),
+      headed: headedToggle.checked,
+    };
+    const result = await (await fetch('/api/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+    if (result.error) { toast(result.error); return; }
+    toast(`${commands[id].label}: ${body.delayMinutes}분 후 예약${body.repeatCount > 1 ? ` (${body.repeatCount}회, 간격 ${body.intervalMinutes}분)` : ''}`);
+  });
+
+  $('#schedList').addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-cancel]');
+    if (!button) return;
+    const result = await (await fetch('/api/schedule/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sid: button.dataset.cancel }) })).json();
+    toast(result.error || '예약을 취소했습니다.');
+  });
+
+  function updateButtons() {
+    document.querySelectorAll('button.run').forEach((button) => { button.disabled = running; });
+    $('#stopBtn').disabled = !running;
+    $('#dot').className = `dot${running ? ' running' : ''}`;
+  }
+
+  function appendLog(line) {
+    const span = document.createElement('span');
+    let cls = '';
+    if (/^▶|^■|^⏰/.test(line)) cls = 'head';
+    else if (/^\$ /.test(line)) cls = 'cmdline';
+    else if (/✓|passed|진입 확인|선택 확인|상신 완료/.test(line)) cls = 'ok';
+    else if (/✘|failed|Error|오류|실패/.test(line)) cls = 'fail';
+    else if (/⚠|주의|비정상|↪|skipped/.test(line)) cls = 'warn';
+    span.className = cls;
+    span.textContent = line + '\n';
+    logEl.appendChild(span);
+
+    if (logEl.childNodes.length > 5000) {
+      logEl.removeChild(logEl.firstChild);
+    }
+
+    if ($('#autoscroll').checked) {
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+  }
+
+  function setStatus(status) {
+    running = status.running;
+
+    if (status.running && status.current) {
+      startedAt = new Date(status.current.startedAt);
+      $('#statusText').textContent = `실행 중: ${status.current.label}${status.current.headed ? ' (브라우저 보기)' : ''}`;
+      $('#currentLabel').textContent = `${status.current.label}`;
+      clearInterval(elapsedTimer);
+      elapsedTimer = setInterval(() => {
+        $('#elapsed').textContent = `경과 ${formatDuration(Math.round((Date.now() - startedAt) / 1000))}`;
+      }, 1000);
+    } else {
+      $('#statusText').textContent = '대기 중';
+      clearInterval(elapsedTimer);
+    }
+
+    updateButtons();
+  }
+
+  async function loadCommands() {
+    const response = await fetch('/api/commands');
+    const data = await response.json();
+    renderGroups(data);
+  }
+
+  async function loadHistory() {
+    const history = await (await fetch('/api/history')).json();
+    const body = $('#historyBody');
+    body.innerHTML = '';
+
+    for (const entry of history.slice(0, 20)) {
+      const tr = document.createElement('tr');
+      const summary = entry.summary || {};
+      tr.innerHTML = `
+        <td>${formatTime(entry.startedAt)}</td>
+        <td>${entry.groupTitle ? entry.groupTitle + ' › ' : ''}${entry.label}</td>
+        <td>${entry.headed ? 'headed' : 'headless'}</td>
+        <td class="result-${entry.result}">${resultLabel(entry)}</td>
+        <td>${summary.passed ?? 0} / ${summary.failed ?? 0} / ${summary.skipped ?? 0}</td>
+        <td>${formatDuration(entry.durationSec)}</td>`;
+      body.appendChild(tr);
+    }
+  }
+
+  async function run(id, extra = {}) {
+    const command = commands[id];
+    const response = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, headed: headedToggle.checked, env: extra.env, label: extra.label }),
+    });
+    const result = await response.json();
+
+    if (result.error) {
+      toast(result.error);
+      return;
+    }
+
+    logEl.innerHTML = '';
+    toast(`${extra.label || command.label} 시작`);
+  }
+
+  // 출퇴근 표의 버튼: 동작(in/out/both/reset)과 계정 번호(또는 all)를 환경변수로 넘긴다.
+  groupsEl.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-att-action]');
+    if (!button) return;
+    const section = button.closest('.group');
+    const meta = JSON.parse(section.dataset.attendance || '{}');
+    const action = button.dataset.attAction;
+    const target = button.dataset.attTarget;
+    const resetAfter = section.querySelector('#attResetAfter')?.checked;
+    const env = {};
+    let who = '전체';
+
+    if (target !== 'all') {
+      env.STAGE_ATT_ACCOUNTS = target;
+      who = meta.labels[target] || `계정 ${target}`;
+    }
+
+    const ACTION_LABELS = { in: '출근', out: '퇴근', both: '출퇴근', reset: '초기화' };
+    let label = `${who} ${ACTION_LABELS[action]}`;
+
+    if (action !== 'reset') {
+      env.STAGE_ATT_MODE = action;
+
+      if (resetAfter && action !== 'in') {
+        env.STAGE_ATT_RESET_AFTER = '1';
+        label += ' + 초기화';
+      }
+    }
+
+    run(action === 'reset' ? meta.reset : meta.run, { env, label });
+  });
+
+  groupsEl.addEventListener('click', (event) => {
+    const runButton = event.target.closest('button.run');
+
+    if (runButton) {
+      run(runButton.dataset.id);
+      return;
+    }
+
+    const folderButton = event.target.closest('button.folder');
+
+    if (folderButton) {
+      fetch('/api/open-folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: folderButton.dataset.folder }) })
+        .then((response) => response.json())
+        .then((result) => toast(result.error || `폴더 열기: ${result.dir}`));
+    }
+  });
+
+  $('#stopBtn').addEventListener('click', async () => {
+    const result = await (await fetch('/api/stop', { method: 'POST' })).json();
+    toast(result.error || '중지 요청을 보냈습니다.');
+  });
+
+  $('#reportBtn').addEventListener('click', async () => {
+    await fetch('/api/open-report', { method: 'POST' });
+    toast('Playwright 리포트를 새 창으로 엽니다.');
+  });
+
+  $('#clearBtn').addEventListener('click', () => { logEl.innerHTML = ''; });
+
+  $('#shutdownBtn').addEventListener('click', async () => {
+    const notice = '오류 스크린샷 폴더와 실행 이력이 모두 삭제됩니다.';
+    if (!confirm(running ? `실행 중인 테스트를 중지하고 패널을 끌까요?\n${notice}` : `패널을 끌까요?\n${notice}\n다시 켜려면 바탕화면의 "자동화 실행 패널" 또는 start.command 를 더블클릭하세요.`)) return;
+    let cleaned = null;
+    try { cleaned = (await (await fetch('/api/shutdown', { method: 'POST' })).json()).cleanup; } catch { /* 서버가 바로 꺼지면 응답이 없을 수 있다 */ }
+    const detail = cleaned ? `스크린샷 ${cleaned.removedFiles}개 삭제 (${cleaned.cleared.join(', ')}), 실행 이력 삭제.` : '';
+    document.body.innerHTML = `<div style="padding:40px;font-size:16px;line-height:1.7">패널을 껐습니다. ${detail}<br>이 탭은 닫아도 됩니다. 다시 켜려면 바탕화면의 <b>자동화 실행 패널</b> 또는 <b>runner-ui/start.command</b> 를 더블클릭하세요.</div>`;
+  });
+
+  $('#cleanupBtn').addEventListener('click', async () => {
+    if (!confirm('오류 스크린샷 폴더와 실행 이력을 모두 비울까요?')) return;
+    const result = await (await fetch('/api/cleanup', { method: 'POST' })).json();
+    if (result.error) { toast(result.error); return; }
+    toast(`초기화 완료: 스크린샷 ${result.removedFiles}개 삭제, 실행 이력 삭제`);
+    document.querySelectorAll('[data-last]').forEach((badge) => { badge.className = 'badge'; badge.textContent = '미실행'; });
+    loadHistory();
+  });
+
+  // 그룹 버튼 클릭 시 해당 명령의 기본 headed 값을 토글에 반영한다 (마우스 오버 시 미리 보기용)
+  groupsEl.addEventListener('mouseover', (event) => {
+    const runButton = event.target.closest('button.run');
+    if (!runButton) return;
+    const command = commands[runButton.dataset.id];
+    runButton.title = `${command.shortcut ? '단축어: ' + command.shortcut + '\n' : ''}npx playwright test ${command.args.join(' ')}`;
+  });
+
+  function connectEvents() {
+    const source = new EventSource('/api/events');
+
+    source.onmessage = (message) => {
+      const event = JSON.parse(message.data);
+
+      if (event.type === 'status') {
+        setStatus(event);
+      } else if (event.type === 'schedules') {
+        schedules = event.schedules;
+        renderSchedules();
+      } else if (event.type === 'log') {
+        appendLog(event.line);
+      } else if (event.type === 'log-bulk') {
+        logEl.innerHTML = '';
+        event.lines.forEach(appendLog);
+      } else if (event.type === 'done') {
+        const badge = document.querySelector(`[data-last="${event.run.id}"]`);
+
+        if (badge) {
+          badge.className = `badge ${event.run.result}`;
+          badge.textContent = `${resultLabel(event.run)} ${formatTime(event.run.startedAt)}`;
+        }
+
+        toast(`${event.run.label}: ${resultLabel(event.run)} (통과 ${event.run.summary.passed}, 실패 ${event.run.summary.failed})`);
+        loadHistory();
+      }
+    };
+
+    source.onerror = () => {
+      source.close();
+      $('#statusText').textContent = '서버 연결 끊김 — 다시 연결 중…';
+      setTimeout(connectEvents, 2000);
+    };
+  }
+
+  loadCommands();
+  loadHistory();
+  connectEvents();
+})();
+</script>
+</body>
+</html>

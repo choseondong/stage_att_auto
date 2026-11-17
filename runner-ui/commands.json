@@ -1,0 +1,28 @@
+{
+  "_설명": "스테이지 출퇴근 전용 패널. 계정별 출근/퇴근/출퇴근/초기화 버튼이 runCommand/resetCommand 에 STAGE_ATT_ACCOUNTS, STAGE_ATT_MODE, STAGE_ATT_RESET_AFTER 환경변수를 붙여 실행한다. headed 여부는 상단 토글.",
+  "_정리": "cleanupOnShutdown 폴더는 패널 끄기/결과 초기화 때 비워진다. 출퇴근 확인 캡처(results/)는 남기려고 제외했다.",
+  "cleanupOnShutdown": [".playwright/test-results", ".playwright/report"],
+  "groups": [
+    {
+      "id": "stage-attendance",
+      "title": "스테이지 출퇴근 위젯",
+      "description": "계정별로 출근 / 퇴근 / 출퇴근(출근→퇴근) / 초기화를 따로 실행한다. 계정은 .env 의 stage_worktest1~6",
+      "env": "stage",
+      "type": "attendance",
+      "runCommand": "stage-att-run",
+      "resetCommand": "stage-att-reset",
+      "accounts": [
+        { "index": 1, "label": "낮고정근무", "envId": "stage_worktest1_ID" },
+        { "index": 2, "label": "낮선택근무", "envId": "stage_worktest2_ID" },
+        { "index": 3, "label": "낮시차근무", "envId": "stage_worktest3_ID" },
+        { "index": 4, "label": "낮교대근무", "envId": "stage_worktest4_ID" },
+        { "index": 5, "label": "낮탄력근무", "envId": "stage_worktest5_ID" },
+        { "index": 6, "label": "낮개인별일정근무", "envId": "stage_worktest6_ID" }
+      ],
+      "commands": [
+        { "id": "stage-att-run", "label": "스테이지 출퇴근", "shortcut": "스테이지 출퇴근", "args": ["--project=attendance"], "resultsDir": "results" },
+        { "id": "stage-att-reset", "label": "스테이지 초기화", "shortcut": "스테이지 초기화", "args": ["--project=reset"], "resultsDir": "results" }
+      ]
+    }
+  ]
+}

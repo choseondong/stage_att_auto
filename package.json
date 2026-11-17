@@ -4,6 +4,7 @@
   "description": "네이버 WORKS 스테이지 출퇴근 위젯 자동화 (출근·퇴근·초기화)",
   "type": "commonjs",
   "scripts": {
+    "ui": "node runner-ui/server.js",
     "att": "playwright test --project=attendance",
     "att:headed": "playwright test --project=attendance --headed",
     "reset": "playwright test --project=reset",

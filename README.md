@@ -42,6 +42,14 @@ STAGE_ATT_ACCOUNTS=고정 npm run reset              # 이름 일부로도 지�
 | `STAGE_ATT_MODE` | `in` / `out` / `both` | 출근만 / 퇴근만 / 출근 후 퇴근 (기본 both) |
 | `STAGE_ATT_RESET_AFTER` | `1` | 퇴근을 마친 계정을 바로 초기화 (출근만 모드에는 적용 안 함) |
 
+## 패널로 실행 (버튼)
+
+```bash
+npm run ui        # 또는 runner-ui/start.command 더블클릭
+```
+
+브라우저에 계정 6개가 표로 뜨고, 줄마다 출근 / 퇴근 / 출퇴근 / 초기화 버튼이 있다. 자세한 건 `runner-ui/README.md`.
+
 ## 알아 둘 것
 
 - 사내 IP 제한이 있는 계정은 "현재 IP 주소에서는 출퇴근을 체크할 수 없습니다" 토스트 캡처를 남기고 건너뛴다.
