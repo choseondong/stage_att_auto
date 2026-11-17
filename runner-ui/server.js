@@ -593,6 +593,23 @@ server.listen(listenPort, HOST, () => {
     }
 
     console.log('종료하려면 Ctrl+C 또는 패널의 "패널 끄기"');
+
+    // 켜지면 브라우저를 연다 (NO_OPEN=1 이면 열지 않음). 여는 경로는 commands.json 의 openPath.
+    if (process.env.NO_OPEN !== '1') {
+        let openPath = '/';
+
+        try {
+            openPath = JSON.parse(fs.readFileSync(COMMANDS_FILE, 'utf-8')).openPath || '/';
+        } catch {
+            /* 기본 경로 사용 */
+        }
+
+        const url = `http://${HOST}:${listenPort}${openPath}`;
+        const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
+        const openerArgs = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+        spawn(opener, openerArgs, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+        console.log(`브라우저에서 열었습니다: ${url}`);
+    }
 });
 
 process.on('SIGINT', () => {

@@ -9,5 +9,4 @@ if lsof -ti tcp:"$PORT" >/dev/null 2>&1; then
   exit 0
 fi
 echo "스테이지 출퇴근 패널을 켭니다: $URL"
-( sleep 1.2; open "$URL" ) &
 PORT="$PORT" node runner-ui/server.js
